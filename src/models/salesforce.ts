@@ -1,0 +1,65 @@
+export interface Lead {
+  attributes: Attributes;
+  Id: string;
+  IsDeleted: boolean;
+  MasterRecordId: string | null;
+  LastName: string;
+  FirstName: string;
+  Salutation: string | null;
+  Name: string;
+  Title: string | null;
+  Company: string;
+  Street: string | null;
+  City: string | null;
+  State: string | null;
+  PostalCode: string | null;
+  Country: string | null;
+  Latitude: number | null;
+  Longitude: number | null;
+  GeocodeAccuracy: string | null;
+  Address: string | null;
+  Phone: string;
+  Email: string;
+  Website: string | null;
+  PhotoUrl: string | null;
+  Description: string | null;
+  LeadSource: string;
+  Status: string;
+  Industry: string | null;
+  Rating: string | null;
+  AnnualRevenue: number | null;
+  NumberOfEmployees: number | null;
+  OwnerId: string;
+  HasOptedOutOfEmail: boolean;
+  IsConverted: boolean;
+  ConvertedDate: string | null;
+  ConvertedAccountId: string | null;
+  ConvertedContactId: string | null;
+  ConvertedOpportunityId: string | null;
+  IsUnreadByOwner: boolean;
+  CreatedDate: string;
+  CreatedById: string;
+  LastModifiedDate: string;
+  LastModifiedById: string;
+  SystemModstamp: string;
+  LastActivityDate: string | null;
+  LastViewedDate: string | null;
+  LastReferencedDate: string | null;
+  Jigsaw: string | null;
+  JigsawContactId: string | null;
+  EmailBouncedReason: string | null;
+  EmailBouncedDate: string | null;
+  IndividualId: string | null;
+  ActionCadenceId: string | null;
+  ActionCadenceAssigneeId: string | null;
+  ActionCadenceState: string | null;
+  FirstCallDateTime: string | null;
+  FirstEmailDateTime: string | null;
+  ActivityMetricId: string;
+  ActivityMetricRollupId: string;
+}
+
+export interface Attributes {
+  type: string;
+  url: string;
+}
