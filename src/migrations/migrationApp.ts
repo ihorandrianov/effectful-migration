@@ -1,4 +1,4 @@
-import { Effect, Fiber, Queue, Schedule, Scope, Stream } from "effect";
+import { Effect, Fiber, Queue, Stream } from "effect";
 import {
   fetchFirstRecords,
   fetchMoreRecords,
@@ -11,9 +11,24 @@ import { createPage, notion } from "../services/notion";
 import { NotionLeadPage } from "../models/notion";
 import { Client } from "@notionhq/client";
 import { Connection } from "jsforce";
-import { BATCH_SIZE } from "../utils/const";
+import {
+  BATCH_SIZE,
+  NOTION_DATABASE_PROPERTIES,
+  NOTION_DATABASE_TITLE,
+  NOTION_WRITE_CONCURENCY,
+} from "../utils/const";
+import {
+  Checkpoint,
+  createCheckpoint,
+  loadLastCheckpoint,
+} from "../services/checkpoint";
+import { makeSdFlag } from "../utils/utils";
 
-const makeNotionDb = (notionClient: Client) =>
+const makeNotionDb = (
+  notionClient: Client,
+  databaseTitle: string,
+  properties: any,
+) =>
   Effect.tryPromise({
     try: async () => {
       const { id } = await notionClient.databases.create({
@@ -24,42 +39,11 @@ const makeNotionDb = (notionClient: Client) =>
           {
             type: "text",
             text: {
-              content: "New Lead Database",
+              content: databaseTitle,
             },
           },
         ],
-        properties: {
-          Name: {
-            title: {},
-          },
-          Company: {
-            rich_text: {},
-          },
-          Email: {
-            email: {},
-          },
-          Phone: {
-            phone_number: {},
-          },
-          Status: {
-            select: {},
-          },
-          LeadSource: {
-            select: {},
-          },
-          AnnualRevenue: {
-            number: {},
-          },
-          NumberOfEmployees: {
-            number: {},
-          },
-          CreatedDate: {
-            date: {},
-          },
-          LastModifiedDate: {
-            date: {},
-          },
-        },
+        properties,
       });
       return id;
     },
@@ -69,16 +53,20 @@ const makeNotionDb = (notionClient: Client) =>
     },
   });
 
-const produceRecords = (queue: Queue.Queue<Lead>, client: Connection) =>
+const produceRecords = (
+  queue: Queue.Queue<Lead>,
+  client: Connection,
+  checkpoint: Checkpoint | null,
+) =>
   Effect.gen(function* () {
     const [firstResults, soql] = yield* Effect.tap(
-      fetchFirstRecords(client),
+      fetchFirstRecords(client, checkpoint),
       (result) => Effect.log(result),
     );
     const total = firstResults.totalSize;
     let fetched = 1;
     yield* Effect.log(`Total records: ${total}`);
-    yield* Effect.log(`Pushing ${fetched} ten records`);
+    yield* Effect.log(`Pushing ${fetched}: ${BATCH_SIZE} records`);
     const leads = firstResults.records.map((record) => record as Lead);
     yield* queue.offerAll(leads);
     while (fetched * BATCH_SIZE < total) {
@@ -88,7 +76,7 @@ const produceRecords = (queue: Queue.Queue<Lead>, client: Connection) =>
         fetched * BATCH_SIZE,
       );
       fetched += 1;
-      yield* Effect.log(`Pushing ${fetched} ten records`);
+      yield* Effect.log(`Pushing ${fetched}: ${BATCH_SIZE} records`);
       const leads = result.records.map((record) => record as Lead);
       yield* queue.offerAll(leads);
     }
@@ -105,29 +93,56 @@ const consumeRecords = (
       Effect.gen(function* () {
         const notionPage = mappingFunction(value);
         yield* Effect.log(`Creating page for : ${value.Name}`);
-        yield* createPage(notionClient, notionPage);
-        return value.CreatedDate;
+        const handle = yield* Effect.forkAll([
+          createPage(notionClient, notionPage),
+          createCheckpoint(
+            value.CreatedDate,
+            notionPage.parent.database_id,
+            value.Id,
+          ),
+        ]);
+
+        yield* handle.await;
+        return {
+          lastSavedDate: value.CreatedDate,
+          notionDbId: notionPage.parent.database_id,
+          lastSavedId: value.Id,
+        };
       }),
     {
-      concurrency: 2,
+      concurrency: NOTION_WRITE_CONCURENCY,
     },
   );
 
 export const migrationApp = Effect.gen(function* () {
-  const salesForceClient = yield* salesforce;
+  const checkpoint = yield* loadLastCheckpoint();
+  const shutdownFlag = yield* makeSdFlag;
 
+  const salesForceClient = yield* salesforce;
   const notionClient = yield* notion;
-  const id = yield* Effect.tap(makeNotionDb(notionClient), Effect.log);
 
   const queue = yield* Queue.bounded<Lead>(BATCH_SIZE * 2);
+
+  const id = checkpoint
+    ? checkpoint.notionDbId
+    : yield* Effect.tap(
+        makeNotionDb(
+          notionClient,
+          NOTION_DATABASE_TITLE,
+          NOTION_DATABASE_PROPERTIES,
+        ),
+        Effect.log,
+      );
 
   const mapSalesforceLeadToNotion = createTransformFunction(id);
 
   const fiber = yield* Effect.forkDaemon(
-    produceRecords(queue, salesForceClient),
+    produceRecords(queue, salesForceClient, checkpoint),
   );
 
-  const stream = Stream.fromQueue(queue);
+  const stream = Stream.fromQueue(queue, {
+    shutdown: true,
+  });
 
   const streamMapped = consumeRecords(
     stream,
@@ -135,11 +150,9 @@ export const migrationApp = Effect.gen(function* () {
     notionClient,
   );
 
-  yield* Stream.runForEach(streamMapped, (x) =>
-    Effect.gen(function* () {
-      yield* Effect.log(x);
-    }),
-  );
+  yield* Stream.runDrain(streamMapped);
+  yield* Queue.shutdown(queue);
+  yield* Effect.log("Complete");
 
   yield* Fiber.await(fiber);
 });

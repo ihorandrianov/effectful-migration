@@ -11,7 +11,10 @@ class NotionClient extends Context.Tag("NotionClient")<
 
 const initNotion = Effect.gen(function* () {
   const notionService = yield* NotionClient;
-  const notionClient = yield* notionService.login(process.env.NOTION_API_KEY!);
+  if (!process.env.NOTION_TOKEN) {
+    return yield* Effect.fail("NOTION_API_KEY is missing from ENV!");
+  }
+  const notionClient = yield* notionService.login(process.env.NOTION_TOKEN);
   yield* Effect.log("Notion initiated");
   return notionClient;
 });
@@ -35,7 +38,7 @@ export const notion = initNotion.pipe(
     login: (token) =>
       Effect.promise(async () => {
         const client = new Client({
-          auth: process.env.NOTION_TOKEN,
+          auth: token,
         });
         return client;
       }),
