@@ -53,13 +53,6 @@ This application is responsible for migrating records from Salesforce to Notion 
 - **Error Handling:**
   - Errors during Notion database creation or record processing are caught and logged, ensuring that failures are visible and the app can fail gracefully when necessary.
 
-## Configuration Constants
-
-- **`BATCH_SIZE`**: Defines the number of Salesforce records fetched in each batch.
-- **`NOTION_WRITE_CONCURRENCY`**: Controls the maximum number of concurrent Notion write operations.
-- **`NOTION_DATABASE_TITLE`**: The title of the Notion database to be created.
-- **`NOTION_DATABASE_PROPERTIES`**: Defines the structure of the Notion database properties.
-
 ## Areas Of Improvement
 
 1. **Logging and Monitoring:**
