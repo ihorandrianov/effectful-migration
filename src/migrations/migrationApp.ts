@@ -115,6 +115,9 @@ const consumeRecords = (
   );
 
 export const migrationApp = Effect.gen(function* () {
+  if (!process.env.NOTION_PAGE_ID) {
+    Effect.fail("NOTION_PAGE_ID is missing in .env file");
+  }
   const checkpoint = yield* loadLastCheckpoint();
   const shutdownFlag = yield* makeSdFlag;
 

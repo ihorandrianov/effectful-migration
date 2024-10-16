@@ -18,7 +18,7 @@ const fetchSalesforce = Effect.gen(function* () {
     !process.env.SALESFORCE_TOKEN
   ) {
     return yield* Effect.fail(
-      "SALESFORCE_LOGIN or SALESFORCE_PASSWORD or SALESEFORCE_TOKEN is missing form ENV",
+      "SALESFORCE_LOGIN, SALESFORCE_PASSWORD, or SALESFORCE_TOKEN is missing from the environment variables.",
     );
   }
   const login = process.env.SALESFORCE_LOGIN;
